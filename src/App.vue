@@ -1,7 +1,12 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
-</script>
+import { onMounted } from 'vue';
+import { useThemeStore } from './stores/themeStore';
 
+onMounted(() => {
+  const themeStore = useThemeStore();
+  themeStore.initTheme();
+});
+</script>
 
 <template>
   <RouterView />

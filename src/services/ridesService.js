@@ -7,11 +7,14 @@ import {
   serverTimestamp,
   updateDoc,
   doc,
+  getDocs,
+  query,
+  where
 } from "firebase/firestore";
 import { ref as dbRef, get } from "firebase/database";
 import { getDistance } from "geolib";
 
-export const createRide = async (origin, destination) => {
+export const createRide = async (origin, destination, type = 'viaje', details = '') => {
   try {
     const snapshot = await get(dbRef(realtime, "drivers_online"));
     const drivers = snapshot.val();
@@ -20,14 +23,26 @@ export const createRide = async (origin, destination) => {
       throw new Error("No hay conductores conectados en este momento.");
     }
 
+    // Obtener conductores ocupados
+    const activeRidesSnap = await getDocs(query(collection(db, "rides"), where("status", "in", ["searching", "accepted", "arrived", "started"])));
+    const busyDrivers = new Set();
+    activeRidesSnap.docs.forEach(docSnap => {
+      const data = docSnap.data();
+      // Solo el chofer actualmente asignado a un viaje activo está ocupado
+      if (data.driverId) busyDrivers.add(data.driverId);
+    });
+
     const nearbyDrivers = [];
 
     Object.keys(drivers).forEach((uid) => {
       const driver = drivers[uid];
-      if (!driver.online) return;
+      if (!driver.online || busyDrivers.has(uid)) return; // <-- Filtramos a los ocupados
 
+      // Para 'compra', medimos la distancia desde el destino (porque el origen no importa/es donde el chofer está)
+      const referenceLocation = (type === 'compra') ? destination : origin;
+      
       const distance = getDistance(
-        { latitude: origin.lat, longitude: origin.lng },
+        { latitude: referenceLocation.lat, longitude: referenceLocation.lng },
         { latitude: driver.lat, longitude: driver.lng }
       );
 
@@ -53,7 +68,9 @@ export const createRide = async (origin, destination) => {
       status: "searching",
       clientId,
       clientName,
-      origin,
+      type,
+      details,
+      origin: origin || null, // Puede ser null en caso de compra
       destination,
       candidateDrivers: nearbyDrivers.map(d => d.uid),
       rejectedDrivers: [],

@@ -23,21 +23,17 @@ export const initAuth = () => {
     async (user) => {
 
       if (user) {
-
-        const userDoc = await getDoc(
-          doc(db, "users", user.uid)
-        );
-
-        const userData = userDoc.data();
-
-        authStore.setUser(user);
-
-        authStore.setRole(
-          userData.role
-        );
-
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          authStore.setUser(user);
+          authStore.setUserData(userData);
+          authStore.setRole(userData.role);
+        } else {
+          authStore.logout();
+        }
       } else {
-
         authStore.logout();
       }
 
