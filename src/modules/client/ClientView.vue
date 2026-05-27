@@ -311,6 +311,13 @@ const listenDriverLocation = (driverId) => {
       </div>
     </div>
 
+<button 
+    @click="centerOnUser"
+    class="absolute top-20 right-4 z-30 bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
+    title="Mi ubicación">
+    <MapPin class="text-blue-600 dark:text-blue-400" :size="24" />
+  </button>
+
     <div class="absolute bottom-0 left-0 right-0 z-20 bg-white dark:bg-slate-800 rounded-t-3xl shadow-2xl border-t border-slate-100 dark:border-slate-700 p-6 max-w-lg mx-auto">
       
       <div v-if="step === 'servicio'" class="space-y-4">
