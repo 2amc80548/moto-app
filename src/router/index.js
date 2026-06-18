@@ -45,23 +45,35 @@ router.beforeEach(async (to, from, next) => {
 
   const isAuthenticated = !!authStore.user;
   const userRole = authStore.role;
+  const isApproved = authStore.userData?.isApproved !== false;
 
   // Si la ruta requiere autenticación y no está logueado
   if (to.meta.requiresAuth && !isAuthenticated) {
     return next({ name: "login" });
   }
 
-  // Si la ruta exige un rol específico y el usuario tiene otro
+  // Si la ruta exige un rol específico y el usuario tiene otro o no está aprobado
   if (to.meta.role && to.meta.role !== userRole) {
-    // Redirigir a su panel correspondiente según su rol real
     if (userRole === "admin") return next({ name: "admin" });
-    if (userRole === "driver") return next({ name: "driver" });
+    if (userRole === "driver") {
+      if (!isApproved) return next({ name: "login" });
+      return next({ name: "driver" });
+    }
     if (userRole === "client") return next({ name: "client" });
+    return next({ name: "login" });
+  }
+
+  // Si es un chofer no aprobado intentando entrar a su panel
+  if (to.name === "driver" && userRole === "driver" && !isApproved) {
     return next({ name: "login" });
   }
 
   // Si está logueado e intenta ir al Login, mandarlo a su panel
   if (to.meta.requiresGuest && isAuthenticated) {
+    if (userRole === "driver" && !isApproved) {
+      // Chofer no aprobado se queda en login para ver la pantalla de WhatsApp
+      return next();
+    }
     return next({ name: userRole || "client" });
   }
 

@@ -77,7 +77,39 @@ const listenFirestoreUsers = () => {
 
 const driversList = computed(() => usersList.value.filter(u => u.role === 'driver'));
 const clientsList = computed(() => usersList.value.filter(u => u.role === 'client'));
-const completedRides = computed(() => rides.value.filter(r => r.status === 'completed').sort((a,b) => b.createdAt - a.createdAt));
+const pendingDrivers = computed(() => driversList.value.filter(d => !d.isApproved));
+
+const searchQuery = ref("");
+
+const historyRides = computed(() => {
+  return rides.value.filter(r => {
+    const isCompleted = r.status === 'completed';
+    const isCancelledAndAccepted = r.status === 'cancelled' && r.wasAccepted === true;
+    return isCompleted || isCancelledAndAccepted;
+  }).sort((a, b) => {
+    const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0);
+    const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0);
+    return timeB - timeA;
+  });
+});
+
+const filteredHistoryRides = computed(() => {
+  const queryStr = searchQuery.value.trim().toLowerCase();
+  if (!queryStr) return historyRides.value;
+  
+  return historyRides.value.filter(ride => {
+    const driverProfile = driversList.value.find(d => d.id === ride.driverId);
+    const driverName = (driverProfile?.name || "").toLowerCase();
+    const driverDni = (driverProfile?.dni || "").toLowerCase();
+    const clientName = (ride.clientName || "").toLowerCase();
+    const rideId = (ride.id || "").toLowerCase();
+    
+    return driverName.includes(queryStr) || 
+           driverDni.includes(queryStr) || 
+           clientName.includes(queryStr) ||
+           rideId.includes(queryStr);
+  });
+});
 
 const onlineDriversList = computed(() => {
   return Object.keys(driversDB.value).map(uid => {
@@ -185,7 +217,7 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
         <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30 shrink-0">
           M
         </div>
-        <h2 v-if="sidebarOpen" class="ml-3 font-black text-xl tracking-tight">MotoYa</h2>
+        <h2 v-if="sidebarOpen" class="ml-3 font-black text-xl tracking-tight">MotoCab</h2>
       </div>
 
       <nav class="flex-1 py-6 px-3 space-y-2">
@@ -193,9 +225,11 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
           <LayoutDashboard :size="20" class="shrink-0" />
           <span v-if="sidebarOpen" class="ml-3">Dashboard</span>
         </button>
-        <button @click="currentTab = 'drivers'" :class="currentTab === 'drivers' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-500'" class="w-full flex items-center p-3 rounded-xl transition font-medium">
+        <button @click="currentTab = 'drivers'" :class="currentTab === 'drivers' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-500'" class="w-full flex items-center p-3 rounded-xl transition font-medium relative">
           <Car :size="20" class="shrink-0" />
           <span v-if="sidebarOpen" class="ml-3">Choferes</span>
+          <span v-if="pendingDrivers.length > 0" class="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
+          <span v-if="pendingDrivers.length > 0" class="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-rose-500 rounded-full"></span>
         </button>
         <button @click="currentTab = 'clients'" :class="currentTab === 'clients' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-500'" class="w-full flex items-center p-3 rounded-xl transition font-medium">
           <Users :size="20" class="shrink-0" />
@@ -228,7 +262,7 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
     <main class="flex-1 flex flex-col h-full overflow-hidden relative">
       <!-- Mobile Header -->
       <header class="md:hidden bg-white dark:bg-slate-950 h-16 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center px-4">
-        <h1 class="font-black text-xl text-blue-600">MotoYa Admin</h1>
+        <h1 class="font-black text-xl text-blue-600">MotoCab Admin</h1>
         <div class="flex gap-2">
            <button @click="toggleTheme" class="p-2 text-slate-500"><Sun v-if="isDark" :size="20"/><Moon v-else :size="20"/></button>
            <button @click="handleLogout" class="p-2 text-rose-500"><LogOut :size="20"/></button>
@@ -240,7 +274,10 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
          <button v-for="(label, key) in {dashboard: 'Dash', drivers: 'Choferes', clients: 'Clientes', history: 'Historial', map: 'Mapa'}" :key="key"
                   @click="currentTab = key; if(key==='map') initMap()"
                   :class="currentTab === key ? 'bg-blue-600 text-white font-bold' : 'text-slate-500 bg-slate-100 dark:bg-slate-800'"
-                  class="px-4 py-2 rounded-lg text-xs shrink-0 mr-2">{{ label }}</button>
+                  class="px-4 py-2 rounded-lg text-xs shrink-0 mr-2 relative">
+           {{ label }}
+           <span v-if="key === 'drivers' && pendingDrivers.length > 0" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border border-white dark:border-slate-950"></span>
+         </button>
       </nav>
 
       <div class="flex-1 overflow-y-auto p-4 md:p-8">
@@ -251,6 +288,21 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
             <h1 class="text-2xl font-black mb-1">Dashboard</h1>
             <p class="text-slate-500 text-sm">Resumen de la plataforma en tiempo real</p>
           </div>
+
+          <!-- Alerta de Choferes Pendientes de Habilitación -->
+          <div v-if="pendingDrivers.length > 0" class="bg-amber-50 dark:bg-amber-950/20 border border-amber-250 dark:border-amber-900 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                <Car :size="24" />
+              </div>
+              <div>
+                <h3 class="font-black text-sm text-slate-800 dark:text-amber-200">Choferes Pendientes de Habilitación</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Hay {{ pendingDrivers.length }} chofer(es) esperando aprobación para poder operar en MotoCab.</p>
+              </div>
+            </div>
+            <button @click="currentTab = 'drivers'" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95">Habilitar ahora</button>
+          </div>
+
           <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-2xl shadow-sm hover:shadow-md transition">
               <Car class="text-blue-500 mb-4" :size="32"/>
@@ -293,7 +345,7 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
               <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                 <tr v-for="driver in driversList" :key="driver.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td class="p-4 flex items-center gap-3">
-                    <img :src="getAvatar(driver.name, '10b981')" class="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-600" />
+                    <img :src="driver.photoUrl || getAvatar(driver.name, '10b981')" class="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-600 object-cover" />
                     <div><p class="font-bold">{{ driver.name }}</p></div>
                   </td>
                   <td class="p-4 text-xs"><p class="font-medium">{{ driver.phone || 'Sin número' }}</p><p class="text-slate-500">{{ driver.email }}</p></td>
@@ -327,7 +379,7 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
               <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                 <tr v-for="client in clientsList" :key="client.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td class="p-4 flex items-center gap-3">
-                    <img :src="getAvatar(client.name, '3b82f6')" class="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-600" />
+                    <img :src="getAvatar(client.name, '3b82f6')" class="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-600 object-cover" />
                     <div><p class="font-bold">{{ client.name }}</p></div>
                   </td>
                   <td class="p-4 text-xs"><p class="font-medium">{{ client.phone || 'Sin número' }}</p><p class="text-slate-500">{{ client.email }}</p></td>
@@ -351,29 +403,54 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
         <div v-if="currentTab === 'history'" class="max-w-6xl mx-auto space-y-4">
            <div>
             <h1 class="text-2xl font-black mb-1">Historial de Viajes</h1>
+            <p class="text-slate-500 text-xs">Consulta todos los viajes completados y cancelados en MotoCab.</p>
           </div>
+
+          <!-- Buscador y filtro -->
+          <div class="relative max-w-md">
+            <input v-model="searchQuery" type="text" placeholder="Buscar por Chofer (Nombre/DNI), Cliente o ID..." class="w-full p-3.5 pl-11 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs outline-none focus:ring-2 ring-blue-500 transition-all shadow-sm">
+            <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">🔍</span>
+          </div>
+
           <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-2 shadow-sm">
-            <div v-for="ride in completedRides" :key="ride.id" class="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition">
+            <div v-for="ride in filteredHistoryRides" :key="ride.id" class="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition">
               <div class="flex items-center gap-4">
-                 <div class="w-12 h-12 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center">
-                   <History class="text-slate-400" :size="24"/>
+                 <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-inner shrink-0" :class="ride.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500' : 'bg-rose-50 dark:bg-rose-950/20 text-rose-500'">
+                   <History :size="24"/>
                  </div>
                  <div>
                    <p class="font-bold text-sm flex items-center flex-wrap gap-2">
                      <span class="text-slate-500 text-xs">El cliente</span>
-                     <span class="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded text-xs">{{ ride.clientName || 'Cliente' }}</span>
-                     <span class="text-slate-500 text-xs">fue llevado por el chofer</span>
-                     <span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 rounded text-xs">{{ driversList.find(d => d.id === ride.driverId)?.name || ride.driverId.slice(0,6) }}</span>
+                     <span class="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded text-xs font-semibold">{{ ride.clientName || 'Cliente' }}</span>
+                     <span class="text-slate-500 text-xs">fue asignado al chofer</span>
+                     <span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 rounded text-xs font-semibold">{{ driversList.find(d => d.id === ride.driverId)?.name || ride.driverId?.slice(0,6) || 'Desconocido' }}</span>
                    </p>
-                   <p class="text-xs text-slate-500 mt-2 font-medium">{{ new Date(ride.createdAt?.toDate()).toLocaleString() }}</p>
+                   <p class="text-[11px] text-slate-400 mt-1.5 font-medium flex gap-2 flex-wrap">
+                     <span>ID: {{ ride.id }}</span>
+                     <span>•</span>
+                     <span>{{ ride.createdAt?.toDate ? new Date(ride.createdAt.toDate()).toLocaleString() : (ride.createdAt ? new Date(ride.createdAt).toLocaleString() : '') }}</span>
+                     <span v-if="ride.type && ride.type !== 'viaje'" class="uppercase bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[9px] font-black text-slate-500 dark:text-slate-300">{{ ride.type }}: {{ ride.details }}</span>
+                   </p>
+
+                   <!-- Detalles de cancelación -->
+                   <p v-if="ride.status === 'cancelled'" class="text-[11px] text-rose-500 dark:text-rose-400 font-bold mt-2 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/20 px-2.5 py-1 rounded-lg w-fit">
+                     ❌ Cancelado por {{ ride.cancelledBy === 'client' ? 'el Cliente' : 'el Chofer' }} 
+                     <span>({{ ride.cancelledAt ? new Date(ride.cancelledAt).toLocaleString() : 'Fecha desconocida' }})</span>
+                   </p>
                  </div>
               </div>
-              <span class="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs px-3 py-1.5 rounded-lg font-bold h-fit border border-purple-200 dark:border-purple-800 shadow-sm flex items-center gap-1 w-fit">
-                <CheckCircle :size="14"/> Completado
-              </span>
+              
+              <div>
+                <span v-if="ride.status === 'completed'" class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs px-3 py-1.5 rounded-lg font-extrabold h-fit border border-emerald-200 dark:border-emerald-800 shadow-sm flex items-center gap-1 w-fit">
+                  <CheckCircle :size="14"/> Completado
+                </span>
+                <span v-else class="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-xs px-3 py-1.5 rounded-lg font-extrabold h-fit border border-rose-200 dark:border-rose-800 shadow-sm flex items-center gap-1 w-fit">
+                  <Ban :size="14"/> Cancelado
+                </span>
+              </div>
             </div>
-            <div v-if="completedRides.length === 0" class="p-8 text-center text-slate-500">
-               No hay viajes completados aún.
+            <div v-if="filteredHistoryRides.length === 0" class="p-8 text-center text-slate-500 font-medium">
+               No se encontraron viajes en el historial.
             </div>
           </div>
         </div>
@@ -390,7 +467,7 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
                <button v-for="driver in onlineDriversList" :key="driver.uid" @click="centerOnDriver(driver)" class="w-full text-left p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center justify-between group">
                  <div class="flex items-center gap-3">
                    <div class="relative">
-                     <img :src="getAvatar(driver.name, '10b981')" class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" />
+                     <img :src="driversList.find(d => d.id === driver.uid)?.photoUrl || getAvatar(driver.name, '10b981')" class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 object-cover" />
                      <div class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900" :class="driver.isBusy ? 'bg-yellow-500' : 'bg-blue-500'"></div>
                    </div>
                    <div>
@@ -421,8 +498,8 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
     </main>
 
     <!-- Modal de Edición -->
-    <div v-if="editModalOpen" class="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div class="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+    <div v-if="editModalOpen" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative border border-white/20 dark:border-slate-700">
         <button @click="editModalOpen = false" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X :size="24"/></button>
         <h2 class="text-xl font-bold mb-6">Editar Usuario</h2>
         

@@ -36,27 +36,24 @@ export const createRide = async (origin, destination, type = 'viaje', details = 
 
     Object.keys(drivers).forEach((uid) => {
       const driver = drivers[uid];
-      if (!driver.online || busyDrivers.has(uid)) return; // <-- Filtramos a los ocupados
+      if (!driver.online || busyDrivers.has(uid)) return;
 
-      // Para 'compra', medimos la distancia desde el destino (porque el origen no importa/es donde el chofer está)
-      const referenceLocation = (type === 'compra') ? destination : origin;
+      const referenceLocation = origin || destination;
+      if (!referenceLocation || driver.lat === undefined || driver.lng === undefined) return;
       
       const distance = getDistance(
         { latitude: referenceLocation.lat, longitude: referenceLocation.lng },
         { latitude: driver.lat, longitude: driver.lng }
       );
 
-      // Opcional: Filtrar para que solo entren conductores a menos de 10km (10000 metros)
-      if (distance <= 10000) {
-        nearbyDrivers.push({ uid, distance });
-      }
+      nearbyDrivers.push({ uid, distance });
     });
 
     // Ordenar del más cercano al más lejano
     nearbyDrivers.sort((a, b) => a.distance - b.distance);
 
     if (nearbyDrivers.length === 0) {
-      throw new Error("No hay conductores cercanos disponibles.");
+      throw new Error("No hay conductores disponibles.");
     }
 
     // Datos del cliente actual
@@ -70,13 +67,14 @@ export const createRide = async (origin, destination, type = 'viaje', details = 
       clientName,
       type,
       details,
-      origin: origin || null, // Puede ser null en caso de compra
+      origin: origin || null,
       destination,
       candidateDrivers: nearbyDrivers.map(d => d.uid),
       rejectedDrivers: [],
       currentDriverIndex: 0,
       driverId: nearbyDrivers[0].uid, // Se le asigna al primero
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     };
 
     const rideRef = await addDoc(collection(db, "rides"), rideData);
