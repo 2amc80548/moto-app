@@ -232,6 +232,7 @@ const toggleOnline = async () => {
   online.value = !online.value;
   
   if (online.value) {
+    centerCamera.value = true;
     startTracking();
     listenRides();
     toast.success("Te has conectado");
@@ -331,12 +332,11 @@ const listenRides = () => {
 
     const rideData = activeRides[0];
     
-    // Check if expired immediately on load/receive
+    // Check if expired immediately on load/receive (only reject if genuinely abandoned, e.g. > 3 minutes)
     const createdAtMs = (rideData.createdAt?.seconds ? rideData.createdAt.seconds * 1000 : rideData.createdAt) || Date.now();
-    const durationLimit = (rideData.type === 'viaje') ? 30000 : 60000;
     const timeElapsed = Date.now() - createdAtMs;
 
-    if (rideData.status === "searching" && timeElapsed > durationLimit) {
+    if (rideData.status === "searching" && timeElapsed > 180000) {
       rejectRide(rideData);
       return;
     }
@@ -356,13 +356,14 @@ const startAcceptanceTimer = (rideData) => {
   const createdAtMs = (rideData.createdAt?.seconds ? rideData.createdAt.seconds * 1000 : rideData.createdAt) || Date.now();
   const durationLimit = (rideData.type === 'viaje') ? 30000 : 60000;
   const timeElapsed = Date.now() - createdAtMs;
-  const remainingTimeMs = Math.max(0, durationLimit - timeElapsed);
+  
+  let remainingTimeMs = durationLimit - timeElapsed;
+  // If the calculated remaining time is negative or invalid due to clock drift, default to full duration limit
+  if (remainingTimeMs <= 0 || remainingTimeMs > durationLimit) {
+    remainingTimeMs = durationLimit;
+  }
 
   timeLeft.value = Math.ceil(remainingTimeMs / 1000);
-  if (timeLeft.value <= 0) {
-    rejectRide(rideData);
-    return;
-  }
 
   timerInterval = setInterval(() => {
     timeLeft.value -= 1;
@@ -455,11 +456,7 @@ const updateRideStatus = async (status) => {
   
   const rideData = rideDoc.data();
   if (status === 'accepted') {
-    const createdAtMs = (rideData.createdAt?.seconds ? rideData.createdAt.seconds * 1000 : rideData.createdAt) || Date.now();
-    const durationLimit = (rideData.type === 'viaje') ? 30000 : 60000;
-    const isExpired = Date.now() - createdAtMs > (durationLimit + 3000);
-
-    if (rideData.status !== 'searching' || rideData.driverId !== auth.currentUser.uid || isExpired) {
+    if (rideData.status !== 'searching' || rideData.driverId !== auth.currentUser.uid) {
       toast.error("El viaje ya no está disponible o el tiempo expiró.");
       currentRide.value = null;
       clearMapData();

@@ -34,6 +34,7 @@ let driverMarker = null;
 
 let rideGlobalTimeout = null;
 let driverPingTimeout = null;
+const lastDriverIndex = ref(null);
 
 // Marcadores visuales de selección
 let selectedOriginMarker = null;
@@ -270,6 +271,7 @@ const setDestination = () => {
 const resetFlow = () => {
   if (rideGlobalTimeout) clearTimeout(rideGlobalTimeout);
   if (driverPingTimeout) clearTimeout(driverPingTimeout);
+  lastDriverIndex.value = null;
   origin.value = null; destination.value = null; currentRide.value = null;
   serviceType.value = 'viaje'; serviceDetails.value = '';
   
@@ -338,22 +340,22 @@ const listenRideStatus = () => {
     if (driverPingTimeout) clearTimeout(driverPingTimeout);
 
     if (updatedRide.status === 'searching') {
-      const createdAtMs = (updatedRide.createdAt?.seconds ? updatedRide.createdAt.seconds * 1000 : updatedRide.createdAt) || Date.now();
-      const updatedAtMs = (updatedRide.updatedAt?.seconds ? updatedRide.updatedAt.seconds * 1000 : updatedRide.updatedAt) || createdAtMs;
-      const durationLimit = (updatedRide.type === 'viaje') ? 30000 : 60000;
-      
-      const timeElapsed = Date.now() - updatedAtMs;
-      if (timeElapsed > durationLimit) {
-        moveToNextDriver(currentRide.value);
-        return;
+      if (lastDriverIndex.value === null || lastDriverIndex.value !== updatedRide.currentDriverIndex) {
+        lastDriverIndex.value = updatedRide.currentDriverIndex;
+        
+        if (driverPingTimeout) clearTimeout(driverPingTimeout);
+        
+        const durationLimit = (updatedRide.type === 'viaje') ? 30000 : 60000;
+        driverPingTimeout = setTimeout(() => {
+          moveToNextDriver(currentRide.value);
+        }, durationLimit + 3000); // 3s grace period
       }
-      
-      const remainingTime = Math.max(0, (durationLimit + 3000) - timeElapsed);
-      driverPingTimeout = setTimeout(() => {
-        moveToNextDriver(currentRide.value);
-      }, remainingTime);
-    } else if (updatedRide.status === 'accepted' || updatedRide.status === 'started' || updatedRide.status === 'arrived') {
-      if (rideGlobalTimeout) clearTimeout(rideGlobalTimeout);
+    } else {
+      lastDriverIndex.value = null;
+      if (driverPingTimeout) clearTimeout(driverPingTimeout);
+      if (updatedRide.status === 'accepted' || updatedRide.status === 'started' || updatedRide.status === 'arrived') {
+        if (rideGlobalTimeout) clearTimeout(rideGlobalTimeout);
+      }
     }
 
     if (updatedRide.driverId && updatedRide.status !== 'completed' && updatedRide.status !== 'cancelled') {
