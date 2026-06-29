@@ -14,7 +14,7 @@ import {
 import { ref as dbRef, get } from "firebase/database";
 import { getDistance } from "geolib";
 
-export const createRide = async (origin, destination, type = 'viaje', details = '') => {
+export const createRide = async (origin, destination, type = 'viaje', details = '', priceData = null) => {
   try {
     const snapshot = await get(dbRef(realtime, "drivers_online"));
     const drivers = snapshot.val();
@@ -75,6 +75,9 @@ export const createRide = async (origin, destination, type = 'viaje', details = 
       driverId: nearbyDrivers[0].uid, // Se le asigna al primero
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      basePrice: priceData?.basePrice || 0,
+      extraPrice: priceData?.extraPrice || 0,
+      totalPrice: priceData?.totalPrice || 0,
     };
 
     const rideRef = await addDoc(collection(db, "rides"), rideData);

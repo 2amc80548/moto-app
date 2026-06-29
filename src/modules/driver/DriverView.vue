@@ -622,6 +622,17 @@ const confirmCancelRideDriver = async () => {
           </span>
           <p class="text-sm font-black text-slate-900 dark:text-white mt-1">{{ currentRide.details || 'Solicitud de transporte' }}</p>
           
+          <!-- Detalle de Tarifa para el Chofer -->
+          <div v-if="currentRide.totalPrice" class="mt-2.5 bg-white/70 dark:bg-slate-950/40 p-2.5 rounded-xl border border-amber-200/50 dark:border-slate-800 flex justify-between items-center text-left text-xs">
+            <div>
+              <span class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase">Tarifa Total</span>
+              <p class="font-extrabold text-slate-900 dark:text-white text-sm">{{ currentRide.totalPrice }} Bs</p>
+            </div>
+            <div v-if="currentRide.extraPrice > 0" class="text-right">
+              <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase font-bold animate-pulse">Bs {{ currentRide.extraPrice }} Extra Incluido</span>
+            </div>
+          </div>
+          
           <div class="flex gap-2 text-xs font-bold mt-3">
             <button type="button" @click="previewLocation('origin')" v-if="currentRide.origin" class="flex-1 py-1.5 bg-white/85 dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200/50">📍 {{ getOriginLabel(currentRide.type) }}</button>
             <button type="button" @click="previewLocation('destination')" class="flex-1 py-1.5 bg-white/85 dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200/50">🏁 {{ getDestinationLabel(currentRide.type) }}</button>
@@ -663,9 +674,10 @@ const confirmCancelRideDriver = async () => {
           </span>
           <p class="text-xs font-bold text-slate-500 dark:text-slate-400 mt-2">Cliente: {{ currentRide.clientName }}</p>
         </div>
-        <div class="text-right">
+        <div class="text-right flex flex-col items-end">
           <p class="text-sm font-black text-slate-800 dark:text-white">{{ routeDuration }}</p>
           <p class="text-[10px] text-slate-400 font-bold">{{ routeDistance }}</p>
+          <p v-if="currentRide.totalPrice" class="text-xs font-black text-blue-600 dark:text-blue-400 mt-1">Cobrar: {{ currentRide.totalPrice }} Bs</p>
         </div>
       </div>
       

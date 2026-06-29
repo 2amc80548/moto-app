@@ -425,6 +425,13 @@ const getAvatar = (name, color='3b82f6') => `https://ui-avatars.com/api/?name=${
                      <span class="text-slate-500 text-xs">fue asignado al chofer</span>
                      <span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 rounded text-xs font-semibold">{{ driversList.find(d => d.id === ride.driverId)?.name || ride.driverId?.slice(0,6) || 'Desconocido' }}</span>
                    </p>
+                   <div v-if="ride.totalPrice" class="mt-1 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span>Tarifa:</span>
+                      <span class="text-blue-600 dark:text-blue-400 font-extrabold">{{ ride.totalPrice }} Bs</span>
+                      <span v-if="ride.extraPrice > 0" class="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200/50 dark:border-emerald-900/30">
+                        + {{ ride.extraPrice }} Bs Extra
+                      </span>
+                    </div>
                    <p class="text-[11px] text-slate-400 mt-1.5 font-medium flex gap-2 flex-wrap">
                      <span>ID: {{ ride.id }}</span>
                      <span>•</span>

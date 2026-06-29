@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import { toast } from "vue-sonner";
 import mapboxgl from "mapbox-gl";
 import { doc, onSnapshot, updateDoc, getDoc } from "firebase/firestore";
@@ -14,6 +14,7 @@ import { createRide, moveToNextDriver } from "../../services/ridesService";
 import { logoutUser } from "../../services/authService";
 import { useRouter } from "vue-router";
 import { useThemeStore } from "../../stores/themeStore";
+import { getRoute } from "../../services/mapService";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -35,6 +36,64 @@ let driverMarker = null;
 let rideGlobalTimeout = null;
 let driverPingTimeout = null;
 const lastDriverIndex = ref(null);
+
+const routeDistance = ref("");
+const routeDuration = ref("");
+const calculatedPrice = ref(4);
+const extraPrice = ref(0);
+const totalPrice = ref(4);
+
+watch(extraPrice, (newVal) => {
+  const parsed = parseInt(newVal) || 0;
+  extraPrice.value = Math.max(0, parsed);
+  totalPrice.value = calculatedPrice.value + extraPrice.value;
+});
+
+const drawRoute = (geometry) => {
+  if (map.getSource("route")) {
+    map.getSource("route").setData(geometry);
+  } else {
+    map.addSource("route", { type: "geojson", data: { type: "Feature", geometry } });
+    map.addLayer({ id: "route", type: "line", source: "route", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#3b82f6", "line-width": 6 } });
+  }
+};
+
+const clearMapRoute = () => {
+  if (map.getSource("route")) { 
+    map.removeLayer("route"); 
+    map.removeSource("route"); 
+  }
+};
+
+const calculateRidePrice = async () => {
+  if (!origin.value || !destination.value) return;
+  
+  try {
+    const route = await getRoute(origin.value, destination.value);
+    if (route && route.geometry) {
+      drawRoute(route.geometry);
+      
+      routeDistance.value = route.distance + " km";
+      routeDuration.value = route.duration + " min";
+      
+      const distanceNum = parseFloat(route.distance) || 0;
+      const baseFee = (serviceType.value === 'viaje') ? 4 : 5;
+      
+      let price = baseFee;
+      if (distanceNum > 1.5) {
+        price += (distanceNum - 1.5) * 3;
+      }
+      
+      calculatedPrice.value = Math.round(price);
+      totalPrice.value = calculatedPrice.value + extraPrice.value;
+    }
+  } catch (error) {
+    console.error("Error calculating ride price:", error);
+    const baseFee = (serviceType.value === 'viaje') ? 4 : 5;
+    calculatedPrice.value = baseFee;
+    totalPrice.value = baseFee + extraPrice.value;
+  }
+};
 
 // Marcadores visuales de selección
 let selectedOriginMarker = null;
@@ -255,7 +314,7 @@ const setOrigin = () => {
   step.value = "destino";
 };
 
-const setDestination = () => {
+const setDestination = async () => {
   const coords = { lat: map.getCenter().lat, lng: map.getCenter().lng };
   destination.value = coords;
   
@@ -264,6 +323,9 @@ const setDestination = () => {
   el.className = "relative flex flex-col items-center animate-bounce z-10";
   el.innerHTML = `<div class="w-6 h-6 bg-rose-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white text-[10px] font-black">B</div>`;
   selectedDestMarker = new mapboxgl.Marker(el).setLngLat([coords.lng, coords.lat]).addTo(map);
+  
+  extraPrice.value = 0;
+  await calculateRidePrice();
   
   step.value = "confirmar";
 };
@@ -287,6 +349,8 @@ const resetFlow = () => {
   if (selectedOriginMarker) { selectedOriginMarker.remove(); selectedOriginMarker = null; }
   if (selectedDestMarker) { selectedDestMarker.remove(); selectedDestMarker = null; }
   if (driverMarker) { driverMarker.remove(); driverMarker = null; }
+  
+  clearMapRoute();
   step.value = "servicio";
 };
 
@@ -294,7 +358,17 @@ const handleRide = async () => {
   if (serviceType.value !== 'compra' && !origin.value) return;
   if (!destination.value) return;
   try {
-    currentRide.value = await createRide(origin.value, destination.value, serviceType.value, serviceDetails.value);
+    currentRide.value = await createRide(
+      origin.value, 
+      destination.value, 
+      serviceType.value, 
+      serviceDetails.value,
+      {
+        basePrice: calculatedPrice.value,
+        extraPrice: extraPrice.value,
+        totalPrice: totalPrice.value
+      }
+    );
     step.value = "viaje_activo";
     
     if (rideGlobalTimeout) clearTimeout(rideGlobalTimeout);
@@ -595,6 +669,39 @@ const listenDriverLocation = (driverId) => {
         <div v-if="serviceType !== 'viaje'" class="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200/50 dark:border-amber-800 text-left max-h-[80px] overflow-y-auto">
           <span class="text-[9px] font-black text-amber-600 uppercase tracking-wider">Especificaciones del servicio</span>
           <p class="text-[11px] font-bold mt-0.5 text-slate-800 dark:text-slate-200 whitespace-pre-line">{{ serviceDetails }}</p>
+        </div>
+
+        <!-- Tarjeta de Costo y Extra -->
+        <div class="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/80 space-y-3 text-left">
+          <div class="flex justify-between items-center">
+            <div>
+              <span class="text-[9px] font-black uppercase text-slate-450 dark:text-slate-400">Tarifa Sugerida</span>
+              <p class="text-lg font-black text-slate-850 dark:text-white">{{ calculatedPrice }} Bs</p>
+            </div>
+            <div class="text-right">
+              <span class="text-[9px] font-black uppercase text-slate-450 dark:text-slate-400">Total a Pagar</span>
+              <p class="text-lg font-black text-blue-650 dark:text-blue-400">{{ totalPrice }} Bs</p>
+            </div>
+          </div>
+
+          <!-- Campo de Extra/Propina -->
+          <div class="pt-1">
+            <label class="text-[10px] uppercase font-bold text-slate-450 dark:text-slate-400 block mb-1">Monto extra (opcional - Bs)</label>
+            <div class="relative group">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-bold text-xs">
+                + Bs.
+              </div>
+              <input 
+                v-model.number="extraPrice" 
+                type="number" 
+                min="0"
+                step="1"
+                placeholder="Ej: 2, 5, 10" 
+                class="w-full pl-12 pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-blue-500 font-bold dark:text-white text-left" 
+              />
+            </div>
+            <p class="text-[9px] text-slate-450 dark:text-slate-400 mt-1">Suma un monto extra para incentivar a los conductores a aceptar tu pedido más rápido.</p>
+          </div>
         </div>
 
         <!-- Advertencia de no cancelación -->
