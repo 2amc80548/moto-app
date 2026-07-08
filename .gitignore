@@ -26,3 +26,10 @@ config.js
 .env
 .env.local
 .env*.local
+
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfvars
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl

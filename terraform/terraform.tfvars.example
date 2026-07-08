@@ -1,0 +1,5 @@
+# Reemplaza con tus credenciales reales y renombra este archivo como terraform.tfvars
+access_key  = "TU_AWS_ACCESS_KEY_ID"
+secret_key  = "TU_AWS_SECRET_ACCESS_KEY"
+aws_region  = "us-east-1"
+bucket_name = "motocab-web-app-hosting-cambiame" # Recuerda usar un nombre globalmente único
