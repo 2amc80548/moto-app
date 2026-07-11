@@ -6,7 +6,7 @@ import { toast } from "vue-sonner";
 import { LogOut, Moon, Sun, MessageCircle, Navigation, User, Crosshair, Key } from "lucide-vue-next";
 
 import { ref as dbRef, set, onDisconnect } from "firebase/database";
-import { collection, query, where, onSnapshot, updateDoc, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, updateDoc, doc, getDoc, getDocs, limit } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
 
 import realtime from "../../firebase/realtime";
@@ -197,6 +197,28 @@ onMounted(async () => {
     style: themeStore.isDark ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/streets-v12",
     center: [-63.18, -17.78],
     zoom: 14,
+  });
+
+  map.on("load", async () => {
+    if (auth.currentUser) {
+      const q = query(
+        collection(db, "rides"),
+        where("driverId", "==", auth.currentUser.uid),
+        where("status", "in", ["accepted", "arrived", "started"]),
+        limit(1)
+      );
+      try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          online.value = true;
+          centerCamera.value = true;
+          startTracking();
+          listenRides();
+        }
+      } catch (err) {
+        console.error("Error al recuperar viaje activo del chofer:", err);
+      }
+    }
   });
 });
 

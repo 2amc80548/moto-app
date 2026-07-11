@@ -39,8 +39,14 @@ router.beforeEach(async (to, from, next) => {
 
   // Esperar a que Firebase inicialice el estado si sigue cargando
   if (authStore.loading) {
-    // Implementación simple: damos un pequeño margen para que initAuth resuelva
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => {
+      const interval = setInterval(() => {
+        if (!authStore.loading) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 50);
+    });
   }
 
   const isAuthenticated = !!authStore.user;

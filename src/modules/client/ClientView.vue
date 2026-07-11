@@ -2,7 +2,7 @@
 import { onMounted, ref, computed, watch } from "vue";
 import { toast } from "vue-sonner";
 import mapboxgl from "mapbox-gl";
-import { doc, onSnapshot, updateDoc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore";
 import { ref as dbRef, onValue } from "firebase/database";
 import { User, LogOut, MessageCircle, Moon, Sun, MapPin, Bike, Package, ShoppingBag, Crosshair, Key } from "lucide-vue-next";
 import { updatePassword } from "firebase/auth";
@@ -179,6 +179,52 @@ onMounted(async () => {
 
   listenDrivers();
   centerOnUser();
+
+  map.on("load", async () => {
+    if (auth.currentUser) {
+      const q = query(
+        collection(db, "rides"),
+        where("clientId", "==", auth.currentUser.uid),
+        where("status", "in", ["searching", "accepted", "arrived", "started"]),
+        limit(1)
+      );
+      try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const rideDoc = querySnapshot.docs[0];
+          const rideData = rideDoc.data();
+          currentRide.value = { id: rideDoc.id, ...rideData };
+          
+          origin.value = rideData.origin || null;
+          destination.value = rideData.destination;
+          step.value = "viaje_activo";
+          
+          // Restaurar marcadores A y B en el mapa
+          if (rideData.origin) {
+            const elA = document.createElement("div");
+            elA.className = "relative flex flex-col items-center z-10";
+            elA.innerHTML = `<div class="w-6 h-6 bg-emerald-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white text-[10px] font-black">A</div>`;
+            selectedOriginMarker = new mapboxgl.Marker(elA).setLngLat([rideData.origin.lng, rideData.origin.lat]).addTo(map);
+          }
+          if (rideData.destination) {
+            const elB = document.createElement("div");
+            elB.className = "relative flex flex-col items-center animate-bounce z-10";
+            elB.innerHTML = `<div class="w-6 h-6 bg-rose-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white text-[10px] font-black">B</div>`;
+            selectedDestMarker = new mapboxgl.Marker(elB).setLngLat([rideData.destination.lng, rideData.destination.lat]).addTo(map);
+          }
+          
+          // Restaurar trazado de ruta y costos
+          if (rideData.origin && rideData.destination) {
+            await calculateRidePrice();
+          }
+          
+          listenRideStatus();
+        }
+      } catch (err) {
+        console.error("Error al recuperar viaje activo:", err);
+      }
+    }
+  });
 });
 
 const toggleTheme = () => {
